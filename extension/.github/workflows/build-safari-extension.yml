@@ -1,0 +1,83 @@
+name: Build Safari Extension
+
+# When this runs:
+# - Manually, via the "Run workflow" button in the Actions tab (workflow_dispatch)
+# - Automatically, whenever you push changes to the extension/ folder
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "extension/**"
+      - ".github/workflows/build-safari-extension.yml"
+
+jobs:
+  build:
+    # macOS runner: this is the only OS that has Xcode preinstalled,
+    # which is why this whole thing has to run on GitHub's macOS machines.
+    runs-on: macos-14
+
+    steps:
+      # Step 1: pull your repo's files onto the runner
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Step 2: confirm which Xcode version we got (useful for debugging)
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # Step 3: run Apple's converter tool against your extension/ folder.
+      # --no-prompt and --force are required for non-interactive CI runs
+      # (locally, the tool asks you questions; here, nobody's watching).
+      - name: Convert web extension to Xcode project
+        run: |
+          xcrun safari-web-extension-converter extension \
+            --project-location build-project \
+            --app-name "DSA Stopwatch" \
+            --bundle-identifier com.dsastopwatch.extension \
+            --swift \
+            --macos-only \
+            --no-open \
+            --no-prompt \
+            --force
+
+      # Step 4: figure out the exact scheme name the converter generated.
+      # This varies slightly by Xcode version, so we ask Xcode to list its
+      # schemes rather than hardcoding a guess, and pick the first one.
+      - name: Find Xcode scheme
+        id: scheme
+        run: |
+          cd build-project/"DSA Stopwatch"
+          SCHEME=$(xcodebuild -list -json | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "Found scheme: $SCHEME"
+          echo "name=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      # Step 5: build it. We disable code signing because we don't have an
+      # Apple Developer certificate here — the resulting app is unsigned,
+      # which is fine for running it yourself locally (see README).
+      - name: Build the app
+        run: |
+          cd build-project/"DSA Stopwatch"
+          xcodebuild build \
+            -scheme "${{ steps.scheme.outputs.name }}" \
+            -configuration Release \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      # Step 6: locate the built .app and zip it so it survives upload
+      # (GitHub Actions artifacts work best as a single file).
+      - name: Zip the built app
+        run: |
+          APP_PATH=$(find build-project/DerivedData -name "*.app" -maxdepth 5 | head -n 1)
+          echo "Found app at: $APP_PATH"
+          mkdir -p out
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" out/DSAStopwatch.app.zip
+
+      # Step 7: make it downloadable from the Actions run summary page
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSAStopwatch-macOS-app
+          path: out/DSAStopwatch.app.zip
+          retention-days: 30
