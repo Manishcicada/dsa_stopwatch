@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DSA Stopwatch</title>
+<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>DSA Stopwatch</h1>
+    </header>
+
+    <input id="problemName" type="text" placeholder="Problem name (e.g. LC 200 - Number of Islands)" />
+
+    <div class="timer" id="timerDisplay">00:00:00</div>
+
+    <div class="controls">
+      <button id="startPauseBtn" class="primary">Start</button>
+      <button id="resetBtn">Reset</button>
+      <button id="saveBtn" class="save">Save Session</button>
+    </div>
+
+    <div class="summary">
+      <span id="todayTotal">Today: 00:00:00</span>
+      <button id="exportBtn" class="link">Export CSV</button>
+      <button id="clearBtn" class="link danger">Clear log</button>
+    </div>
+
+    <ul id="sessionList" class="session-list"></ul>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

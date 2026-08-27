@@ -1,0 +1,121 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  width: 300px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.app {
+  padding: 14px 16px 16px;
+}
+
+header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: #38bdf8;
+  letter-spacing: 0.2px;
+}
+
+input#problemName {
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #e2e8f0;
+  font-size: 12px;
+  margin-bottom: 10px;
+  outline: none;
+}
+input#problemName:focus {
+  border-color: #38bdf8;
+}
+
+.timer {
+  text-align: center;
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  padding: 10px 0 14px;
+  color: #f8fafc;
+}
+.timer.running { color: #4ade80; }
+
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.controls button {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary { background: #38bdf8; color: #0f172a; }
+button.primary.running { background: #f97316; }
+button#resetBtn { background: #334155; color: #e2e8f0; }
+button.save { background: #4ade80; color: #0f172a; }
+button.save:disabled, button#resetBtn:disabled, button.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+button.link {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+button.link.danger { color: #f87171; }
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  border-top: 1px solid #1e293b;
+}
+.session-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 2px;
+  border-bottom: 1px solid #1e293b;
+  font-size: 11.5px;
+}
+.session-list li .s-name {
+  color: #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-list li .s-time {
+  color: #4ade80;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.session-list .empty {
+  text-align: center;
+  color: #64748b;
+  padding: 12px 0;
+}
