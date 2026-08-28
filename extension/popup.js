@@ -14,146 +14,456 @@ const els = {
 
 let state = {
   running: false,
-  startTime: null,   // epoch ms when current run began
-  elapsed: 0,         // accumulated ms while paused/stopped
+  startTime: null,
+  elapsed: 0,
   problemName: "",
-  sessions: [],        // {name, ms, date}
+  sessions: [],
 };
 
 let tickHandle = null;
+let loaded = false;
+
+
+// ------------------------------------------------------------
+// Formatting
+// ------------------------------------------------------------
 
 function fmt(ms) {
   const totalSec = Math.floor(ms / 1000);
+
   const h = String(Math.floor(totalSec / 3600)).padStart(2, "0");
   const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
   const s = String(totalSec % 60).padStart(2, "0");
+
   return `${h}:${m}:${s}`;
 }
 
+
 function currentElapsed() {
-  return state.elapsed + (state.running ? Date.now() - state.startTime : 0);
+  if (!state.running || !state.startTime) {
+    return state.elapsed;
+  }
+
+  return state.elapsed + (Date.now() - state.startTime);
 }
 
-function render() {
-  els.timer.textContent = fmt(currentElapsed());
-  els.timer.classList.toggle("running", state.running);
-  els.startPause.textContent = state.running ? "Pause" : "Start";
-  els.startPause.classList.toggle("running", state.running);
-  els.name.value = state.problemName;
-  els.name.disabled = state.running || currentElapsed() > 0;
-  els.save.disabled = currentElapsed() === 0;
 
-  const todayStr = new Date().toDateString();
-  const todayMs = state.sessions
-    .filter(s => new Date(s.date).toDateString() === todayStr)
-    .reduce((sum, s) => sum + s.ms, 0);
-  els.today.textContent = `Today: ${fmt(todayMs)}`;
+// ------------------------------------------------------------
+// Storage
+// ------------------------------------------------------------
 
-  if (state.sessions.length === 0) {
-    els.list.innerHTML = `<li class="empty">No sessions logged yet</li>`;
-  } else {
-    els.list.innerHTML = state.sessions
-      .slice()
-      .reverse()
-      .map(s => `<li><span class="s-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name || "Untitled")}</span><span class="s-time">${fmt(s.ms)}</span></li>`)
-      .join("");
+async function save() {
+  try {
+    await chrome.storage.local.set({
+      [STORAGE_KEY]: state,
+    });
+  } catch (error) {
+    console.error("Failed to save stopwatch state:", error);
   }
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[c]);
+
+async function load() {
+  try {
+    const data = await chrome.storage.local.get(STORAGE_KEY);
+
+    if (data && data[STORAGE_KEY]) {
+      state = {
+        ...state,
+        ...data[STORAGE_KEY],
+      };
+    }
+
+    loaded = true;
+
+    render();
+
+    if (state.running) {
+      startTick();
+    }
+  } catch (error) {
+    console.error("Failed to load stopwatch state:", error);
+
+    loaded = true;
+    render();
+  }
 }
 
-function save() {
-  chrome.storage.local.set({ [STORAGE_KEY]: state });
+
+// ------------------------------------------------------------
+// Rendering
+// ------------------------------------------------------------
+
+function render() {
+  const elapsed = currentElapsed();
+
+  els.timer.textContent = fmt(elapsed);
+
+  els.timer.classList.toggle(
+    "running",
+    state.running
+  );
+
+  els.startPause.textContent =
+    state.running ? "Pause" : "Start";
+
+  els.startPause.classList.toggle(
+    "running",
+    state.running
+  );
+
+  els.name.value = state.problemName;
+
+  els.name.disabled =
+    state.running || elapsed > 0;
+
+  els.save.disabled =
+    elapsed === 0;
+
+  // ----------------------------------------------------------
+  // Today's total
+  // ----------------------------------------------------------
+
+  const todayStr = new Date().toDateString();
+
+  const todayMs = state.sessions
+    .filter(session => {
+      return new Date(session.date).toDateString() === todayStr;
+    })
+    .reduce((sum, session) => {
+      return sum + Number(session.ms || 0);
+    }, 0);
+
+  els.today.textContent =
+    `Today: ${fmt(todayMs)}`;
+
+
+  // ----------------------------------------------------------
+  // Session list
+  // ----------------------------------------------------------
+
+  if (state.sessions.length === 0) {
+    els.list.innerHTML =
+      `<li class="empty">No sessions logged yet</li>`;
+
+    return;
+  }
+
+  els.list.innerHTML = state.sessions
+    .slice()
+    .reverse()
+    .map(session => {
+      const name = escapeHtml(
+        session.name || "Untitled"
+      );
+
+      return `
+        <li>
+          <span
+            class="s-name"
+            title="${name}"
+          >
+            ${name}
+          </span>
+
+          <span class="s-time">
+            ${fmt(Number(session.ms || 0))}
+          </span>
+        </li>
+      `;
+    })
+    .join("");
 }
+
+
+function escapeHtml(str) {
+  return String(str).replace(
+    /[&<>"']/g,
+    char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[char]
+  );
+}
+
+
+// ------------------------------------------------------------
+// Timer
+// ------------------------------------------------------------
 
 function startTick() {
-  if (tickHandle) return;
-  tickHandle = setInterval(render, 250);
+  if (tickHandle) {
+    return;
+  }
+
+  tickHandle = setInterval(() => {
+    render();
+  }, 250);
 }
+
+
 function stopTick() {
+  if (!tickHandle) {
+    return;
+  }
+
   clearInterval(tickHandle);
   tickHandle = null;
 }
 
-function load() {
-  chrome.storage.local.get(STORAGE_KEY, data => {
-    if (data && data[STORAGE_KEY]) {
-      state = Object.assign(state, data[STORAGE_KEY]);
+
+// ------------------------------------------------------------
+// Start / Pause
+// ------------------------------------------------------------
+
+els.startPause.addEventListener(
+  "click",
+  async () => {
+
+    if (!loaded) {
+      return;
     }
+
+    if (state.running) {
+
+      // Pause
+      state.elapsed +=
+        Date.now() - state.startTime;
+
+      state.startTime = null;
+      state.running = false;
+
+      stopTick();
+
+    } else {
+
+      // Start / Resume
+      state.problemName =
+        els.name.value.trim();
+
+      state.startTime = Date.now();
+      state.running = true;
+
+      startTick();
+    }
+
+    await save();
+
     render();
-    if (state.running) startTick();
-  });
+  }
+);
+
+
+// ------------------------------------------------------------
+// Reset current stopwatch
+// ------------------------------------------------------------
+
+els.reset.addEventListener(
+  "click",
+  async () => {
+
+    if (!loaded) {
+      return;
+    }
+
+    state.running = false;
+    state.startTime = null;
+    state.elapsed = 0;
+
+    stopTick();
+
+    await save();
+
+    render();
+  }
+);
+
+
+// ------------------------------------------------------------
+// Save session
+// ------------------------------------------------------------
+
+els.save.addEventListener(
+  "click",
+  async () => {
+
+    if (!loaded) {
+      return;
+    }
+
+    const ms = currentElapsed();
+
+    if (ms <= 0) {
+      return;
+    }
+
+    const name =
+      els.name.value.trim() ||
+      state.problemName ||
+      "Untitled";
+
+    state.sessions.push({
+      name,
+      ms,
+      date: new Date().toISOString(),
+    });
+
+    state.running = false;
+    state.startTime = null;
+    state.elapsed = 0;
+    state.problemName = "";
+
+    stopTick();
+
+    await save();
+
+    els.name.value = "";
+
+    render();
+  }
+);
+
+
+// ------------------------------------------------------------
+// Clear all sessions
+// ------------------------------------------------------------
+
+els.clear.addEventListener(
+  "click",
+  async () => {
+
+    if (!loaded) {
+      return;
+    }
+
+    if (state.sessions.length === 0) {
+      return;
+    }
+
+    // Safari extension popups can behave differently from
+    // normal webpages with window.confirm().
+    //
+    // For now, clicking Clear Logs directly clears the history.
+
+    state.sessions = [];
+
+    await save();
+
+    render();
+  }
+);
+
+
+// ------------------------------------------------------------
+// CSV generation
+// ------------------------------------------------------------
+
+function csvEscape(value) {
+  return `"${String(value)
+    .replace(/"/g, '""')}"`;
 }
 
-els.startPause.addEventListener("click", () => {
-  if (state.running) {
-    // pause
-    state.elapsed += Date.now() - state.startTime;
-    state.startTime = null;
-    state.running = false;
-    stopTick();
-  } else {
-    // start / resume
-    state.problemName = els.name.value.trim();
-    state.startTime = Date.now();
-    state.running = true;
-    startTick();
-  }
-  save();
-  render();
-});
 
-els.reset.addEventListener("click", () => {
-  state.running = false;
-  state.startTime = null;
-  state.elapsed = 0;
-  stopTick();
-  save();
-  render();
-});
+function createCSV() {
 
-els.save.addEventListener("click", () => {
-  const ms = currentElapsed();
-  if (ms === 0) return;
-  const name = els.name.value.trim() || state.problemName;
-  state.sessions.push({ name, ms, date: new Date().toISOString() });
-  state.running = false;
-  state.startTime = null;
-  state.elapsed = 0;
-  state.problemName = "";
-  els.name.value = "";
-  stopTick();
-  save();
-  render();
-});
+  const rows = [
+    [
+      "Problem",
+      "Duration (h:m:s)",
+      "Duration (seconds)",
+      "Date",
+    ],
+  ];
 
-els.clear.addEventListener("click", () => {
-  if (!confirm("Clear all logged sessions? This can't be undone.")) return;
-  state.sessions = [];
-  save();
-  render();
-});
+  state.sessions.forEach(session => {
 
-els.export.addEventListener("click", () => {
-  if (state.sessions.length === 0) return;
-  const rows = [["Problem", "Duration (h:m:s)", "Duration (seconds)", "Date"]];
-  state.sessions.forEach(s => {
-    rows.push([s.name || "Untitled", fmt(s.ms), Math.round(s.ms / 1000), s.date]);
+    const milliseconds =
+      Number(session.ms || 0);
+
+    rows.push([
+      session.name || "Untitled",
+      fmt(milliseconds),
+      Math.round(milliseconds / 1000),
+      session.date,
+    ]);
   });
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `dsa-stopwatch-sessions-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-});
+
+  return rows
+    .map(row => {
+      return row
+        .map(csvEscape)
+        .join(",");
+    })
+    .join("\r\n");
+}
+
+
+// ------------------------------------------------------------
+// Export CSV
+// ------------------------------------------------------------
+
+els.export.addEventListener(
+  "click",
+  async () => {
+
+    if (!loaded) {
+      return;
+    }
+
+    if (state.sessions.length === 0) {
+      return;
+    }
+
+    try {
+
+      const csv = createCSV();
+
+      // UTF-8 BOM helps Numbers / Excel recognize UTF-8 CSV.
+      const csvWithBom =
+        "\uFEFF" + csv;
+
+      const dataUrl =
+        "data:text/csv;charset=utf-8," +
+        encodeURIComponent(csvWithBom);
+
+      const filename =
+        `dsa-stopwatch-sessions-${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`;
+
+      /*
+       * Safari extension popups don't reliably behave like
+       * normal webpages when programmatically downloading
+       * Blob URLs.
+       *
+       * Opening the generated CSV in a Safari tab lets Safari
+       * handle the file normally.
+       */
+
+      await chrome.tabs.create({
+        url: dataUrl,
+      });
+
+      console.log(
+        `CSV generated: ${filename}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Failed to export CSV:",
+        error
+      );
+    }
+  }
+);
+
+
+// ------------------------------------------------------------
+// Start
+// ------------------------------------------------------------
 
 load();
