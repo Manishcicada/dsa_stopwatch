@@ -1,15 +1,21 @@
-# ⏱️ DSA Stopwatch — Safari Extension
+# DSA Stopwatch ⏱️
 
-A lightweight Safari Web Extension that tracks how much time you spend solving DSA problems.
+**A free Safari extension for tracking how long you spend solving
+DSA and LeetCode problems.**
 
-Instead of wondering:
+DSA Stopwatch helps you measure your coding practice time with a
+built-in stopwatch, session history, daily practice tracking, and
+CSV export.
 
-> "How long did I actually spend on that LeetCode problem?"
+Perfect for:
 
-DSA Stopwatch gives you a simple stopwatch directly inside Safari.
+- LeetCode practice
+- Data Structures & Algorithms preparation
+- Coding interview preparation
+- Competitive programming
+- Tracking daily coding practice
 
-It is designed for students and programmers who want to track their DSA practice sessions without opening another application.
-
+[Installation](#installation) · [Features](#features) · [Build](#building)
 ---
 
 ## ✨ Features
